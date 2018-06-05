@@ -19,8 +19,7 @@ package com.graylog.splunk.output;
 import com.google.common.collect.ImmutableMap;
 import com.google.inject.Inject;
 import com.google.inject.assistedinject.Assisted;
-import com.graylog.splunk.output.senders.Sender;
-import com.graylog.splunk.output.senders.TCPSender;
+import com.graylog.splunk.output.senders.*;
 import org.graylog2.plugin.Message;
 import org.graylog2.plugin.configuration.Configuration;
 import org.graylog2.plugin.configuration.ConfigurationRequest;
@@ -33,15 +32,20 @@ import org.graylog2.plugin.inputs.annotations.FactoryClass;
 import org.graylog2.plugin.outputs.MessageOutput;
 import org.graylog2.plugin.outputs.MessageOutputConfigurationException;
 import org.graylog2.plugin.streams.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
 
 public class SplunkOutput implements MessageOutput {
 
+    private static final Logger LOG = LoggerFactory.getLogger(SplunkOutput.class);
+
     private static final String CK_SPLUNK_HOST = "splunk_host";
     private static final String CK_SPLUNK_PORT = "splunk_port";
     private static final String CK_SPLUNK_PROTOCOL = "splunk_protocol";
+    private static final String CK_SPLUNK_PARAMS = "splunk_params";
 
     private boolean running = true;
 
@@ -55,11 +59,25 @@ public class SplunkOutput implements MessageOutput {
         }
 
         // Set up sender.
-        sender = new TCPSender(
+//        sender = new TCPSender(
+//                configuration.getString(CK_SPLUNK_HOST),
+//                configuration.getInt(CK_SPLUNK_PORT)
+//        );
+//        sender = new UDPSender(
+//                configuration.getString(CK_SPLUNK_HOST),
+//                configuration.getInt(CK_SPLUNK_PORT),
+//                configuration.getString(CK_SPLUNK_PARAMS)
+//        );
+//        sender = new UDPSender_2(
+//                configuration.getString(CK_SPLUNK_HOST),
+//                configuration.getInt(CK_SPLUNK_PORT),
+//                configuration.getString(CK_SPLUNK_PARAMS)
+//        );
+        sender = new UDPSender_3(
                 configuration.getString(CK_SPLUNK_HOST),
-                configuration.getInt(CK_SPLUNK_PORT)
+                configuration.getInt(CK_SPLUNK_PORT),
+                configuration.getString(CK_SPLUNK_PARAMS)
         );
-
         running = true;
     }
 
@@ -84,7 +102,9 @@ public class SplunkOutput implements MessageOutput {
             sender.initialize();
         }
 
+        System.out.println("before Send");
         sender.send(message);
+        System.out.println("after send");
     }
 
     @Override
@@ -125,21 +145,27 @@ public class SplunkOutput implements MessageOutput {
 
             configurationRequest.addField(new TextField(
                             CK_SPLUNK_HOST, "Splunk Host", "",
-                            "Hostname or IP address of a Splunk instance",
+                            "目标域名或IP",
                             ConfigurationField.Optional.NOT_OPTIONAL)
             );
 
             configurationRequest.addField(new NumberField(
                             CK_SPLUNK_PORT, "Splunk Port", 12999,
-                            "Port of a Splunk instance",
+                            "端口号",
                             ConfigurationField.Optional.OPTIONAL)
             );
 
-            final Map<String, String> protocols = ImmutableMap.of("TCP", "TCP");
+            final Map<String, String> protocols = ImmutableMap.of("UDP", "UDP");
             configurationRequest.addField(new DropdownField(
-                            CK_SPLUNK_PROTOCOL, "Splunk Protocol", "TCP", protocols,
-                            "Protocol that should be used to send messages to Splunk",
+                            CK_SPLUNK_PROTOCOL, "Splunk Protocol", "UDP", protocols,
+                            "协议类型",
                             ConfigurationField.Optional.OPTIONAL)
+            );
+
+            configurationRequest.addField(new TextField(
+                    CK_SPLUNK_PARAMS, "params", "",
+                    "参数列表",
+                    ConfigurationField.Optional.NOT_OPTIONAL)
             );
 
             return configurationRequest;

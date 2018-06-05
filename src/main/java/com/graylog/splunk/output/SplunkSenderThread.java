@@ -17,10 +17,16 @@
 
 package com.graylog.splunk.output;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.DatagramPacket;
+import java.net.InetSocketAddress;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -69,13 +75,32 @@ public class SplunkSenderThread {
                             // but if we aren't connected anymore, we'll have already pulled an event from the queue,
                             // which we keep hanging around in this thread and in the next loop iteration will block until we are connected again.
                             if (message != null && channel != null && channel.isActive()) {
-                                // Write the Splunk message to the pipeline. The protocol specific channel handler
-                                // will take care of encoding.
-                                channel.writeAndFlush(message);
+                                try {
+                                    ByteBuf byteBuf =  Unpooled.buffer(message.getBytes().length);
+                                    byteBuf.writeBytes(message.getBytes());
+
+                                    ChannelFuture future = channel.writeAndFlush(
+                                            new io.netty.channel.socket.DatagramPacket(byteBuf,
+                                                    new InetSocketAddress("10.1.16.201", 6667)));
+                                    future.addListener(new ChannelFutureListener() {
+                                        @Override
+                                        public void operationComplete(ChannelFuture channelFuture) throws Exception {
+                                            if (future.isSuccess()) {
+                                                LOG.info("写入成功");
+                                            }
+                                            else {
+                                                LOG.info("写入失败");
+                                            }
+                                        }
+                                    });
+                                }catch (Exception e){
+                                    LOG.error(e.getMessage());
+                                }
                                 message = null;
                             }
                         } catch (InterruptedException e) {
                             // ignore, when stopping keepRunning will be set to false outside
+                            LOG.error(e.getMessage());
                         }
                     } finally {
                         lock.unlock();
