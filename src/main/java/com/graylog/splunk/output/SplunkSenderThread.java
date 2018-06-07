@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.DatagramPacket;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -74,22 +75,25 @@ public class SplunkSenderThread {
                             // if we are still connected, convert LoggingEvent to Splunk and send it
                             // but if we aren't connected anymore, we'll have already pulled an event from the queue,
                             // which we keep hanging around in this thread and in the next loop iteration will block until we are connected again.
-                            if (message != null && channel != null && channel.isActive()) {
+                            if (message != null && !message.isEmpty() && channel != null && channel.isActive()) {
                                 try {
+                                    if (null != channel.remoteAddress()) {
+                                        InetSocketAddress address = (InetSocketAddress)channel.remoteAddress();
+                                        LOG.info("channel地址 " + address.getHostName()+"  " + address.getPort() + " "+address.getHostString());
+                                    }
+                                    else {
+                                        LOG.error("channel地址为null");
+                                    }
                                     ByteBuf byteBuf =  Unpooled.buffer(message.getBytes().length);
                                     byteBuf.writeBytes(message.getBytes());
-
                                     ChannelFuture future = channel.writeAndFlush(
                                             new io.netty.channel.socket.DatagramPacket(byteBuf,
                                                     new InetSocketAddress("10.1.16.201", 6667)));
                                     future.addListener(new ChannelFutureListener() {
                                         @Override
                                         public void operationComplete(ChannelFuture channelFuture) throws Exception {
-                                            if (future.isSuccess()) {
-                                                LOG.info("写入成功");
-                                            }
-                                            else {
-                                                LOG.info("写入失败");
+                                            if (!future.isSuccess()) {
+                                                LOG.error("write failed ");
                                             }
                                         }
                                     });

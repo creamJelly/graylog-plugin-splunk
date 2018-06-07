@@ -19,7 +19,8 @@ package com.graylog.splunk.output;
 import com.google.common.collect.ImmutableMap;
 import com.google.inject.Inject;
 import com.google.inject.assistedinject.Assisted;
-import com.graylog.splunk.output.senders.*;
+import com.graylog.splunk.output.senders.Sender;
+import com.graylog.splunk.output.senders.UDPSender_3;
 import org.graylog2.plugin.Message;
 import org.graylog2.plugin.configuration.Configuration;
 import org.graylog2.plugin.configuration.ConfigurationRequest;
@@ -102,9 +103,7 @@ public class SplunkOutput implements MessageOutput {
             sender.initialize();
         }
 
-        System.out.println("before Send");
         sender.send(message);
-        System.out.println("after send");
     }
 
     @Override

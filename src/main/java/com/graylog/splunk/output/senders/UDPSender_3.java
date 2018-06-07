@@ -16,9 +16,10 @@
  */
 package com.graylog.splunk.output.senders;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.graylog.splunk.output.SplunkSenderThread;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
@@ -27,13 +28,22 @@ import org.graylog2.plugin.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 public class UDPSender_3 implements Sender {
 
@@ -87,8 +97,7 @@ public class UDPSender_3 implements Sender {
 
                             @Override
                             public void channelActive(ChannelHandlerContext ctx) throws Exception {
-//                                senderThread.start(ctx.channel());
-                                LOG.info("channel 活跃");
+                                senderThread.start(ctx.channel());
                             }
 
                             @Override
@@ -105,7 +114,7 @@ public class UDPSender_3 implements Sender {
                         });
                     }
                 });
-        Channel channel = bootstrap.bind(0).addListener(new ChannelFutureListener() {
+        bootstrap.bind(0).addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
                 if (future.isSuccess()) {
@@ -115,11 +124,11 @@ public class UDPSender_3 implements Sender {
                     scheduleReconnect(future.channel().eventLoop());
                 }
             }
-        }).channel();
-        senderThread.start(channel);
+        });
+//        senderThread.start(channel);
     }
 
-    protected void scheduleReconnect(final EventLoopGroup workerGroup) {
+    private void scheduleReconnect(final EventLoopGroup workerGroup) {
         workerGroup.schedule(new Runnable() {
             @Override
             public void run() {
@@ -144,27 +153,74 @@ public class UDPSender_3 implements Sender {
     @Override
     public void send(Message message) {
         StringBuilder splunkMessage = new StringBuilder();
-        splunkMessage.append(message.getTimestamp().toString("yyyy/MM/dd-HH:mm:ss.SSS"))
-                .append(" ")
-                .append(noNewLines(message.getMessage()))
-                .append(" original_source=").append(escape(message.getField(Message.FIELD_SOURCE)));
+        try {
+            // 从本地文件中读取tlog格式
+            Path path = Paths.get("/home/graylog_conf/"+this.params);
+            byte[] bytes = Files.readAllBytes(path);
+            String result = new String(bytes);
 
-        for (Map.Entry<String, Object> field : message.getFields().entrySet()) {
-            if (Message.RESERVED_FIELDS.contains(field.getKey()) || field.getKey().equals(Message.FIELD_STREAMS)) {
-                continue;
+            LinkedHashMap<String, String> map = new LinkedHashMap<String, String>();
+            String[] paramList = result.split(",");
+//            for(int i = 0; i < paramList.length; i ++) {
+//                String mid = String.valueOf(paramList[i]);
+//                String[] innerStr = mid.split("=");
+//                map.put(innerStr[0].trim().toLowerCase(), innerStr[1]);
+//            }
+            for(String param : paramList) {
+                String[] innerStr = param.split("=");
+                map.put(innerStr[0].trim().toLowerCase(), innerStr[1]);
             }
 
-            splunkMessage.append(" ").append(field.getKey()).append("=").append(escape(field.getValue()));
+            // 开始处理log数据
+            String str = message.getMessage();
+            Pattern pattern = Pattern.compile("\\{.*\\}");
+            Matcher matcher = pattern.matcher(str);
+            if (matcher.find()) {
+                String logStr = matcher.group(0);
+                logStr = logStr.replaceAll("\\{|\\}", "");
+                // 按照","分割字符串
+                String[] logList = logStr.split("\\s*,\\s*");
+                for (String log : logList) {
+//                    LOG.info("遍历log数组 = "+log);
+                    String[] sList = log.split("\\s*=\\s*");
+                    if (sList.length == 2) {
+                        if (map.containsKey(sList[0].trim().toLowerCase()) && !sList[1].isEmpty())  {
+                            map.put(sList[0].trim().toLowerCase(), sList[1]);
+                        }
+                    }
+                }
+
+                for(Map.Entry<String, String> entry : map.entrySet()) {
+                    if (entry.getKey().equals("flowname") && entry.getValue().isEmpty()) {
+                        splunkMessage.setLength(0);
+                        break;
+                    }
+                    if (entry.getKey().equals("flowname") && !entry.getValue().equals(this.params)) {
+                        splunkMessage.setLength(0);
+                        break;
+                    }
+                    if (splunkMessage.length() > 0) {
+                        splunkMessage.append("|");
+                    }
+                    splunkMessage.append(entry.getValue());
+                }
+                if (splunkMessage.length() > 0) {
+                    splunkMessage.append("\r\n");
+                    LOG.info("Sending message: {}", splunkMessage);
+                    queue.put(splunkMessage.toString());
+                } else {
+                    LOG.error("invalid message ======== " + message.getMessage());
+                }
+            } else {
+                LOG.info("not match "+ str);
+            }
         }
-
-        splunkMessage.append("\r\n");
-
-        LOG.debug("Sending message: {}", splunkMessage);
-//
-        try {
-            queue.put(splunkMessage.toString());
+        catch (IOException e) {
+            LOG.warn("Interrupted. Can't read config file. " + e.getMessage());
         } catch (InterruptedException e) {
-            LOG.warn("Interrupted. Message was most probably lost.");
+            LOG.warn("Interrupted. Message was most probably lost. " + e.getMessage());
+        } catch (Exception e) {
+            LOG.warn("Interrupted. Something error." + e.getMessage());
         }
     }
 

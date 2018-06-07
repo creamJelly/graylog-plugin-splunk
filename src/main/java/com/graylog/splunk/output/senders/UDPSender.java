@@ -21,7 +21,9 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.string.StringEncoder;
 import org.graylog2.plugin.Message;
 import org.slf4j.Logger;
@@ -53,6 +55,7 @@ public class UDPSender implements Sender {
     private final EventLoopGroup workerGroup = new NioEventLoopGroup();
 
     public UDPSender(String hostname, int port, String params) {
+        LOG.info("初始化UDPSender");
         this.hostname = hostname;
         this.port = port;
         this.params = params;
@@ -67,27 +70,29 @@ public class UDPSender implements Sender {
         this.queue = new LinkedBlockingQueue<>(512);
     }
 
-    protected void createBootstrap(final EventLoopGroup workerGroup) {
+    private void createBootstrap(final EventLoopGroup workerGroup) {
         final Bootstrap bootstrap = new Bootstrap();
         final SplunkSenderThread senderThread = new SplunkSenderThread(queue);
 
         bootstrap.group(workerGroup)
-                .channel(NioDatagramChannel.class)
+                .channel(NioSocketChannel.class)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
                 .remoteAddress(new InetSocketAddress(hostname, port))
-                .handler(new ChannelInitializer<NioDatagramChannel>() {
+                .handler(new ChannelInitializer<NioSocketChannel>() {
                     @Override
-                    protected void initChannel(NioDatagramChannel ch) throws Exception {
+                    protected void initChannel(NioSocketChannel ch) throws Exception {
+                        LOG.info("初始化Channel");
                         ch.pipeline().addLast(new StringEncoder());
 
-                        ch.pipeline().addLast(new SimpleChannelInboundHandler<DatagramPacket>() {
+                        ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
                             @Override
-                            protected void channelRead0(ChannelHandlerContext ctx, DatagramPacket msg) throws Exception {
-                              // we only send data, never read on the socket
+                            protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+                                // we only send data, never read on the socket
                             }
 
                             @Override
                             public void channelActive(ChannelHandlerContext ctx) throws Exception {
+                                LOG.info("channelActive - 开始线程");
                                 senderThread.start(ctx.channel());
                             }
 
@@ -105,7 +110,7 @@ public class UDPSender implements Sender {
                         });
                     }
                 });
-        bootstrap.bind(0).addListener(new ChannelFutureListener() {
+        Channel channel = bootstrap.bind(0).addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
                 if (future.isSuccess()) {
@@ -115,7 +120,8 @@ public class UDPSender implements Sender {
                     scheduleReconnect(future.channel().eventLoop());
                 }
             }
-        });
+        }).channel();
+        senderThread.start(channel);
     }
 
     protected void scheduleReconnect(final EventLoopGroup workerGroup) {
@@ -142,6 +148,7 @@ public class UDPSender implements Sender {
 
     @Override
     public void send(Message message) {
+        LOG.info("进入send方法");
         StringBuilder splunkMessage = new StringBuilder();
         splunkMessage.append(message.getTimestamp().toString("yyyy/MM/dd-HH:mm:ss.SSS"))
                 .append(" ")
@@ -149,6 +156,7 @@ public class UDPSender implements Sender {
                 .append(" original_source=").append(escape(message.getField(Message.FIELD_SOURCE)));
 
         for (Map.Entry<String, Object> field : message.getFields().entrySet()) {
+            LOG.info("udpSend key = "+field.getKey());
             if (Message.RESERVED_FIELDS.contains(field.getKey()) || field.getKey().equals(Message.FIELD_STREAMS)) {
                 continue;
             }
