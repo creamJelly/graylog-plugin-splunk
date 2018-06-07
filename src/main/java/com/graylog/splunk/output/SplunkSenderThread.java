@@ -17,22 +17,19 @@
 
 package com.graylog.splunk.output;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.socket.DatagramPacket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.DatagramPacket;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+
 
 public class SplunkSenderThread {
 
@@ -43,14 +40,14 @@ public class SplunkSenderThread {
     private final Thread senderThread;
     private Channel channel;
 
-    public SplunkSenderThread(final BlockingQueue<String> queue) {
+    public SplunkSenderThread(final BlockingQueue<DatagramPacket> queue) {
         this.lock = new ReentrantLock();
         this.connectedCond = lock.newCondition();
 
         this.senderThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                String message = null;
+                DatagramPacket message = null;
 
                 while (keepRunning.get()) {
                     // wait until we are connected to the Splunk server before polling log events from the queue
@@ -75,20 +72,9 @@ public class SplunkSenderThread {
                             // if we are still connected, convert LoggingEvent to Splunk and send it
                             // but if we aren't connected anymore, we'll have already pulled an event from the queue,
                             // which we keep hanging around in this thread and in the next loop iteration will block until we are connected again.
-                            if (message != null && !message.isEmpty() && channel != null && channel.isActive()) {
+                            if (message != null && channel != null && channel.isActive()) {
                                 try {
-                                    if (null != channel.remoteAddress()) {
-                                        InetSocketAddress address = (InetSocketAddress)channel.remoteAddress();
-                                        LOG.info("channel地址 " + address.getHostName()+"  " + address.getPort() + " "+address.getHostString());
-                                    }
-                                    else {
-                                        LOG.error("channel地址为null");
-                                    }
-                                    ByteBuf byteBuf =  Unpooled.buffer(message.getBytes().length);
-                                    byteBuf.writeBytes(message.getBytes());
-                                    ChannelFuture future = channel.writeAndFlush(
-                                            new io.netty.channel.socket.DatagramPacket(byteBuf,
-                                                    new InetSocketAddress("10.1.16.201", 6667)));
+                                    ChannelFuture future = channel.writeAndFlush(message);
                                     future.addListener(new ChannelFutureListener() {
                                         @Override
                                         public void operationComplete(ChannelFuture channelFuture) throws Exception {

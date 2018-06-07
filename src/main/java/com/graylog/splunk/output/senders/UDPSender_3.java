@@ -16,12 +16,13 @@
  */
 package com.graylog.splunk.output.senders;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
 import com.graylog.splunk.output.SplunkSenderThread;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.DatagramPacket;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.handler.codec.string.StringEncoder;
 import org.graylog2.plugin.Message;
@@ -30,20 +31,16 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 public class UDPSender_3 implements Sender {
 
@@ -57,7 +54,7 @@ public class UDPSender_3 implements Sender {
 
     boolean initialized = false;
 
-    protected final BlockingQueue<String> queue;
+    protected final BlockingQueue<DatagramPacket> queue;
 
     private final EventLoopGroup workerGroup = new NioEventLoopGroup();
 
@@ -207,7 +204,19 @@ public class UDPSender_3 implements Sender {
                 if (splunkMessage.length() > 0) {
                     splunkMessage.append("\r\n");
                     LOG.info("Sending message: {}", splunkMessage);
-                    queue.put(splunkMessage.toString());
+
+                    // 组建数据
+                    String resultStr = splunkMessage.toString();
+                    ByteBuf byteBuf =  Unpooled.buffer(resultStr.getBytes().length);
+                    byteBuf.writeBytes(resultStr.getBytes());
+                    DatagramPacket resultData = new DatagramPacket(byteBuf, new InetSocketAddress(this.hostname, this.port));
+                    queue.put(resultData);
+//                    ChannelFuture future = channel.writeAndFlush(
+//                            new io.netty.channel.socket.DatagramPacket(byteBuf,
+//                                    new InetSocketAddress("10.1.16.201", 6667)));
+//                    DatagramPacket result = new DatagramPacket();
+//                    result.setAddress(new InetAddress(this.hostname, this.port));
+//                    queue.put(splunkMessage.toString());
                 } else {
                     LOG.error("invalid message ======== " + message.getMessage());
                 }
@@ -217,8 +226,6 @@ public class UDPSender_3 implements Sender {
         }
         catch (IOException e) {
             LOG.warn("Interrupted. Can't read config file. " + e.getMessage());
-        } catch (InterruptedException e) {
-            LOG.warn("Interrupted. Message was most probably lost. " + e.getMessage());
         } catch (Exception e) {
             LOG.warn("Interrupted. Something error." + e.getMessage());
         }
