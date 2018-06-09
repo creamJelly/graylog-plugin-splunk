@@ -151,24 +151,21 @@ public class UDPSender_3 implements Sender {
     public void send(Message message) {
         StringBuilder splunkMessage = new StringBuilder();
         try {
-            // 从本地文件中读取tlog格式
-            Path path = Paths.get("/home/graylog_conf/"+this.params);
-            byte[] bytes = Files.readAllBytes(path);
-            String result = new String(bytes);
-
+            // 记录日志名字
+            String flowName = "";
             LinkedHashMap<String, String> map = new LinkedHashMap<String, String>();
-            String[] paramList = result.split(",");
-//            for(int i = 0; i < paramList.length; i ++) {
-//                String mid = String.valueOf(paramList[i]);
-//                String[] innerStr = mid.split("=");
-//                map.put(innerStr[0].trim().toLowerCase(), innerStr[1]);
-//            }
+            String[] paramList = this.params.split(",");
             for(String param : paramList) {
                 String[] innerStr = param.split("=");
-                map.put(innerStr[0].trim().toLowerCase(), innerStr[1]);
+                map.put(innerStr[0].trim(), innerStr[1]);
+                if (innerStr[0].equals("FlowName")) {
+                    flowName = innerStr[1];
+                }
             }
 
             // 开始处理log数据
+            // 是否日志名字的标识
+            Boolean flag = false;
             String str = message.getMessage();
             Pattern pattern = Pattern.compile("\\{.*\\}");
             Matcher matcher = pattern.matcher(str);
@@ -178,21 +175,21 @@ public class UDPSender_3 implements Sender {
                 // 按照","分割字符串
                 String[] logList = logStr.split("\\s*,\\s*");
                 for (String log : logList) {
-//                    LOG.info("遍历log数组 = "+log);
+
                     String[] sList = log.split("\\s*=\\s*");
                     if (sList.length == 2) {
-                        if (map.containsKey(sList[0].trim().toLowerCase()) && !sList[1].isEmpty())  {
-                            map.put(sList[0].trim().toLowerCase(), sList[1]);
+                        if (map.containsKey(sList[0].trim()) && !sList[1].isEmpty())  {
+                            map.put(sList[0].trim(), sList[1]);
                         }
                     }
                 }
 
                 for(Map.Entry<String, String> entry : map.entrySet()) {
-                    if (entry.getKey().equals("flowname") && entry.getValue().isEmpty()) {
+                    if (entry.getKey().equals("FlowName") && entry.getValue().isEmpty()) {
                         splunkMessage.setLength(0);
                         break;
                     }
-                    if (entry.getKey().equals("flowname") && !entry.getValue().equals(this.params)) {
+                    if (entry.getKey().equals("FlowName") && !entry.getValue().equals(flowName)) {
                         splunkMessage.setLength(0);
                         break;
                     }
@@ -211,21 +208,12 @@ public class UDPSender_3 implements Sender {
                     byteBuf.writeBytes(resultStr.getBytes());
                     DatagramPacket resultData = new DatagramPacket(byteBuf, new InetSocketAddress(this.hostname, this.port));
                     queue.put(resultData);
-//                    ChannelFuture future = channel.writeAndFlush(
-//                            new io.netty.channel.socket.DatagramPacket(byteBuf,
-//                                    new InetSocketAddress("10.1.16.201", 6667)));
-//                    DatagramPacket result = new DatagramPacket();
-//                    result.setAddress(new InetAddress(this.hostname, this.port));
-//                    queue.put(splunkMessage.toString());
                 } else {
                     LOG.error("invalid message ======== " + message.getMessage());
                 }
             } else {
                 LOG.info("not match "+ str);
             }
-        }
-        catch (IOException e) {
-            LOG.warn("Interrupted. Can't read config file. " + e.getMessage());
         } catch (Exception e) {
             LOG.warn("Interrupted. Something error." + e.getMessage());
         }
