@@ -166,7 +166,17 @@ public class UDPSender_3 implements Sender {
             // 开始处理log数据
             // 是否日志名字的标识
             Boolean flag = false;
-            String str = message.getMessage();
+            String str = "";
+            for(Map.Entry<String, Object> field : message.getFields().entrySet()) {
+                if (field.getKey().equals("full_message")) {
+                    str = field.getValue().toString();
+                }
+            }
+
+            if (str.isEmpty() || str.equals("")) {
+                return;
+            }
+//            String str = message.getMessage();
             Pattern pattern = Pattern.compile("\\{.*\\}");
             Matcher matcher = pattern.matcher(str);
             if (matcher.find()) {
@@ -180,8 +190,17 @@ public class UDPSender_3 implements Sender {
                     if (sList.length == 2) {
                         if (map.containsKey(sList[0].trim()) && !sList[1].isEmpty())  {
                             map.put(sList[0].trim(), sList[1]);
+                            if (sList[0].trim().equals("FlowName") && sList[1].equals(flowName)) {
+                                flag = true;
+//                                System.out.println("  !!!!!!!!!!!!!!   " + flowName);
+//                                LOG.info("!!!!!!!!!!!!!!!!!!!!!!!!!From Log str = " + matcher.group(0) + "  paramList = " + this.params);
+                            }
                         }
                     }
+                }
+
+                if (!flag) {
+                    return;
                 }
 
                 for(Map.Entry<String, String> entry : map.entrySet()) {
@@ -200,7 +219,7 @@ public class UDPSender_3 implements Sender {
                 }
                 if (splunkMessage.length() > 0) {
                     splunkMessage.append("\r\n");
-                    LOG.info("Sending message: {}", splunkMessage);
+//                    LOG.info("Sending message: {}", splunkMessage);
 
                     // 组建数据
                     String resultStr = splunkMessage.toString();
@@ -212,7 +231,7 @@ public class UDPSender_3 implements Sender {
                     LOG.error("invalid message ======== " + message.getMessage());
                 }
             } else {
-                LOG.info("not match "+ str);
+//                LOG.info("not match "+ str);
             }
         } catch (Exception e) {
             LOG.warn("Interrupted. Something error." + e.getMessage());
