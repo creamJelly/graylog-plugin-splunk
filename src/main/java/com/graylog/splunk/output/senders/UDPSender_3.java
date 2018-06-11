@@ -29,11 +29,7 @@ import org.graylog2.plugin.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -53,6 +49,8 @@ public class UDPSender_3 implements Sender {
     private final String params;
 
     boolean initialized = false;
+
+    int times = 0;
 
     protected final BlockingQueue<DatagramPacket> queue;
 
@@ -129,8 +127,14 @@ public class UDPSender_3 implements Sender {
         workerGroup.schedule(new Runnable() {
             @Override
             public void run() {
-                LOG.info("Starting reconnect!");
-                createBootstrap(workerGroup);
+                times += 1;
+                if (times <= 5) {
+                    LOG.info("Starting reconnect!");
+                    createBootstrap(workerGroup);
+                }
+                else {
+                    LOG.info("reconnect over 5 times, stop!");
+                }
             }
         }, 1000, TimeUnit.MILLISECONDS);
     }
@@ -223,8 +227,8 @@ public class UDPSender_3 implements Sender {
 
                     // 组建数据
                     String resultStr = splunkMessage.toString();
-                    ByteBuf byteBuf =  Unpooled.buffer(resultStr.getBytes().length);
-                    byteBuf.writeBytes(resultStr.getBytes());
+                    ByteBuf byteBuf =  Unpooled.buffer(resultStr.getBytes("UTF-8").length);
+                    byteBuf.writeBytes(resultStr.getBytes("UTF-8"));
                     DatagramPacket resultData = new DatagramPacket(byteBuf, new InetSocketAddress(this.hostname, this.port));
                     queue.put(resultData);
                 } else {
