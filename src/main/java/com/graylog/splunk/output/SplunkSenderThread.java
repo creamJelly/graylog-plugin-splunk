@@ -81,6 +81,9 @@ public class SplunkSenderThread {
                                             if (!future.isSuccess()) {
                                                 LOG.error("write failed ");
                                             }
+                                            else {
+                                                LOG.info("write success !");
+                                            }
                                         }
                                     });
                                 }catch (Exception e){

@@ -30,6 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -46,7 +47,7 @@ public class UDPSender_3 implements Sender {
 
     private final String hostname;
     private final int port;
-    private final String params;
+    private String params;
 
     boolean initialized = false;
 
@@ -154,91 +155,58 @@ public class UDPSender_3 implements Sender {
     @Override
     public void send(Message message) {
         StringBuilder splunkMessage = new StringBuilder();
+        String flowName = "";
+        LinkedHashMap<String, String> map = new LinkedHashMap<String, String>();
+        String[] paramList = this.params.split(",");
+        for(String param : paramList) {
+            String[] innerStr = param.split("=");
+            map.put(innerStr[0].trim(), innerStr[1]);
+            if (innerStr[0].equals("FlowName")) {
+                flowName = innerStr[1];
+            }
+        }
+
+        if (flowName.equals("") || flowName.length() <= 0) {
+//            LOG.info("need flowName");
+            return;
+        }
+
+        // 给各字段赋值
+        Boolean sendFlag = false;
+        for(Map.Entry<String, Object> field : message.getFields().entrySet()) {
+//            LOG.info(" in message      key = " + field.getKey() + "  value = " + field.getValue());
+            if (field.getKey().equals("FlowName") && field.getValue().equals(map.get("FlowName"))) {
+                sendFlag = true;
+            }
+            if (!field.getKey().equals("FlowName") && map.containsKey(field.getKey())) {
+                map.put(field.getKey(), field.getValue().toString());
+//                LOG.info("put value key = " + field.getKey() + " value = " + field.getValue().toString());
+            }
+        }
+
+        if (!sendFlag) {
+//            LOG.info("flowName not match, flowName = " + flowName);
+            return;
+        }
+
+        for(Map.Entry<String, String> entry : map.entrySet()) {
+            if (splunkMessage.length() > 0) {
+                splunkMessage.append("|");
+            }
+            splunkMessage.append(entry.getValue());
+        }
+        splunkMessage.append("\r\n");
+
         try {
-            // 记录日志名字
-            String flowName = "";
-            LinkedHashMap<String, String> map = new LinkedHashMap<String, String>();
-            String[] paramList = this.params.split(",");
-            for(String param : paramList) {
-                String[] innerStr = param.split("=");
-                map.put(innerStr[0].trim(), innerStr[1]);
-                if (innerStr[0].equals("FlowName")) {
-                    flowName = innerStr[1];
-                }
-            }
-
-            // 开始处理log数据
-            // 是否日志名字的标识
-            Boolean flag = false;
-            String str = "";
-            for(Map.Entry<String, Object> field : message.getFields().entrySet()) {
-                if (field.getKey().equals("full_message")) {
-                    str = field.getValue().toString();
-                }
-            }
-
-            if (str.isEmpty() || str.equals("")) {
-                return;
-            }
-//            String str = message.getMessage();
-            Pattern pattern = Pattern.compile("\\{.*\\}");
-            Matcher matcher = pattern.matcher(str);
-            if (matcher.find()) {
-                String logStr = matcher.group(0);
-                logStr = logStr.replaceAll("\\{|\\}", "");
-                // 按照","分割字符串
-                String[] logList = logStr.split("\\s*,\\s*");
-                for (String log : logList) {
-
-                    String[] sList = log.split("\\s*=\\s*");
-                    if (sList.length == 2) {
-                        if (map.containsKey(sList[0].trim()) && !sList[1].isEmpty())  {
-                            map.put(sList[0].trim(), sList[1]);
-                            if (sList[0].trim().equals("FlowName") && sList[1].equals(flowName)) {
-                                flag = true;
-//                                System.out.println("  !!!!!!!!!!!!!!   " + flowName);
-//                                LOG.info("!!!!!!!!!!!!!!!!!!!!!!!!!From Log str = " + matcher.group(0) + "  paramList = " + this.params);
-                            }
-                        }
-                    }
-                }
-
-                if (!flag) {
-                    return;
-                }
-
-                for(Map.Entry<String, String> entry : map.entrySet()) {
-                    if (entry.getKey().equals("FlowName") && entry.getValue().isEmpty()) {
-                        splunkMessage.setLength(0);
-                        break;
-                    }
-                    if (entry.getKey().equals("FlowName") && !entry.getValue().equals(flowName)) {
-                        splunkMessage.setLength(0);
-                        break;
-                    }
-                    if (splunkMessage.length() > 0) {
-                        splunkMessage.append("|");
-                    }
-                    splunkMessage.append(entry.getValue());
-                }
-                if (splunkMessage.length() > 0) {
-                    splunkMessage.append("\r\n");
-//                    LOG.info("Sending message: {}", splunkMessage);
-
-                    // 组建数据
-                    String resultStr = splunkMessage.toString();
-                    ByteBuf byteBuf =  Unpooled.buffer(resultStr.getBytes("UTF-8").length);
-                    byteBuf.writeBytes(resultStr.getBytes("UTF-8"));
-                    DatagramPacket resultData = new DatagramPacket(byteBuf, new InetSocketAddress(this.hostname, this.port));
-                    queue.put(resultData);
-                } else {
-                    LOG.error("invalid message ======== " + message.getMessage());
-                }
-            } else {
-//                LOG.info("not match "+ str);
-            }
-        } catch (Exception e) {
-            LOG.warn("Interrupted. Something error." + e.getMessage());
+            String resultStr = splunkMessage.toString();
+            LOG.info("ready to make struct     " + resultStr);
+            ByteBuf byteBuf = Unpooled.buffer(resultStr.getBytes().length);
+            byteBuf.writeBytes(resultStr.getBytes());
+            DatagramPacket resultData = new DatagramPacket(byteBuf, new InetSocketAddress(this.hostname, this.port));
+            queue.put(resultData);
+        }
+        catch (InterruptedException e) {
+            e.printStackTrace();
         }
     }
 
