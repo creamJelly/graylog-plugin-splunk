@@ -53,6 +53,10 @@ public class UDPSender_3 implements Sender {
 
     int times = 0;
 
+    private LinkedHashMap<String, String> paramsMap;
+    private String flowName;
+    private boolean initFlag = false;
+
     protected final BlockingQueue<DatagramPacket> queue;
 
     private final EventLoopGroup workerGroup = new NioEventLoopGroup();
@@ -70,6 +74,31 @@ public class UDPSender_3 implements Sender {
           * TODO: Make configurable.
           */
         this.queue = new LinkedBlockingQueue<>(512);
+    }
+
+    public void initParamsMap() {
+        this.paramsMap = new LinkedHashMap<String, String>();
+        String[] paramList = this.params.split(",");
+        for(String param : paramList) {
+            String[] innerStr = param.split("=");
+            if (innerStr.length != 2) {
+                this.initFlag = false;
+                LOG.error("params format not right   , " + param);
+                return;
+            }
+            this.paramsMap.put(innerStr[0].trim(), innerStr[1]);
+            if (innerStr[0].equals("FlowName")) {
+                this.flowName = innerStr[1];
+            }
+        }
+
+        if (this.flowName.equals("") || this.flowName.length() <= 0) {
+            this.initFlag = false;
+            LOG.error("flowname not exist ,  flowName = " + this.flowName);
+            return;
+        }
+        LOG.info("init success !  , params = " + this.params);
+        this.initFlag = true;
     }
 
     protected void createBootstrap(final EventLoopGroup workerGroup) {
@@ -154,22 +183,27 @@ public class UDPSender_3 implements Sender {
 
     @Override
     public void send(Message message) {
-        StringBuilder splunkMessage = new StringBuilder();
-        String flowName = "";
-        LinkedHashMap<String, String> map = new LinkedHashMap<String, String>();
-        String[] paramList = this.params.split(",");
-        for(String param : paramList) {
-            String[] innerStr = param.split("=");
-            map.put(innerStr[0].trim(), innerStr[1]);
-            if (innerStr[0].equals("FlowName")) {
-                flowName = innerStr[1];
-            }
-        }
-
-        if (flowName.equals("") || flowName.length() <= 0) {
-//            LOG.info("need flowName");
+        if (!this.initFlag) {
+            LOG.error("failed while init paramsMap, stop in send func, params = " + this.params);
             return;
         }
+        StringBuilder splunkMessage = new StringBuilder();
+//        String flowName = "";
+//        LinkedHashMap<String, String> map = new LinkedHashMap<String, String>();
+//        String[] paramList = this.params.split(",");
+//        for(String param : paramList) {
+//            String[] innerStr = param.split("=");
+//            map.put(innerStr[0].trim(), innerStr[1]);
+//            if (innerStr[0].equals("FlowName")) {
+//                flowName = innerStr[1];
+//            }
+//        }
+//
+//        if (flowName.equals("") || flowName.length() <= 0) {
+////            LOG.info("need flowName");
+//            return;
+//        }
+        LinkedHashMap<String, String> map = (LinkedHashMap<String, String>)this.paramsMap.clone();
 
         // 给各字段赋值
         Boolean sendFlag = false;
