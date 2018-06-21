@@ -25,13 +25,20 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.handler.codec.string.StringEncoder;
+import org.dom4j.Document;
+import org.dom4j.Element;
+import org.dom4j.io.SAXReader;
 import org.graylog2.plugin.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
-import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -47,24 +54,20 @@ public class UDPSender_3 implements Sender {
 
     private final String hostname;
     private final int port;
-    private String params;
 
     boolean initialized = false;
 
     int times = 0;
 
-    private LinkedHashMap<String, String> paramsMap;
-    private String flowName;
-    private boolean initFlag = false;
+    private HashMap<String, LinkedHashMap<String, String>> xmlMap;
 
     protected final BlockingQueue<DatagramPacket> queue;
 
     private final EventLoopGroup workerGroup = new NioEventLoopGroup();
 
-    public UDPSender_3(String hostname, int port, String params) {
+    public UDPSender_3(String hostname, int port) {
         this.hostname = hostname;
         this.port = port;
-        this.params = params;
 
         /*
           * This internal queue shields us from causing OutputBufferProcessor
@@ -74,31 +77,73 @@ public class UDPSender_3 implements Sender {
           * TODO: Make configurable.
           */
         this.queue = new LinkedBlockingQueue<>(512);
+        initParams();
     }
 
-    public void initParamsMap() {
-        this.paramsMap = new LinkedHashMap<String, String>();
-        String[] paramList = this.params.split(",");
-        for(String param : paramList) {
-            String[] innerStr = param.split("=");
-            if (innerStr.length != 2) {
-                this.initFlag = false;
-                LOG.error("params format not right   , " + param);
+    /**
+     * 初始化参数
+     */
+    private void initParams() {
+        try {
+            String path = File.separator + "home" + File.separator + "graylog_conf" + File.separator + "BI.xml";
+            File file = new File(path);
+//            LOG.info("file path = " + path);
+            if (!file.exists()) {
+                LOG.error("file not exist!  path = " + path);
+                xmlMap = null;
                 return;
             }
-            this.paramsMap.put(innerStr[0].trim(), innerStr[1]);
-            if (innerStr[0].equals("FlowName")) {
-                this.flowName = innerStr[1];
+
+            if (file.isDirectory()) {
+                LOG.error("need file, not dir , path = " + path);
+                xmlMap = null;
+                return;
+            }
+
+
+            xmlMap = new HashMap<String, LinkedHashMap<String, String>>();
+            InputStream in = new FileInputStream(path);
+            SAXReader reader = new SAXReader();
+            Document doc = reader.read(in);
+            Element root = doc.getRootElement();
+            readNode(root, "");
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            xmlMap = null;
+        }
+    }
+
+    private void readNode(Element root, String structName) {
+        if (root == null) return;
+        // 获取属性
+        if (!structName.equals("") && structName.length() > 0) {
+            LinkedHashMap<String, String> valueMap = xmlMap.get(structName);
+            String value = "NULL";
+            String valueType = root.attributeValue("type").trim();
+            if (valueType.equals("int")) {
+                value = "0";
+            }
+            valueMap.put(root.attributeValue("name"), value);
+            xmlMap.put(structName, valueMap);
+            LOG.info("structName = " + structName + " value = " + valueMap.toString());
+        }
+        // 获取他的子节点
+        if (root.getName().equals("struct")) {
+            LOG.info("!!!!  " + root.attributeValue("name"));
+            LinkedHashMap<String, String> valueMap = new LinkedHashMap<String, String>();
+            valueMap.put("FlowName", root.attributeValue("name"));
+            xmlMap.put(root.attributeValue("name"), valueMap);
+        }
+        List<Element> childNodes = root.elements();
+        for (Element e : childNodes) {
+            if (root.getName().equals("struct")) {
+                readNode(e, root.attributeValue("name"));
+            }
+            else {
+                readNode(e, "");
             }
         }
-
-        if (this.flowName.equals("") || this.flowName.length() <= 0) {
-            this.initFlag = false;
-            LOG.error("flowname not exist ,  flowName = " + this.flowName);
-            return;
-        }
-        LOG.info("init success !  , params = " + this.params);
-        this.initFlag = true;
     }
 
     protected void createBootstrap(final EventLoopGroup workerGroup) {
@@ -183,63 +228,48 @@ public class UDPSender_3 implements Sender {
 
     @Override
     public void send(Message message) {
-        if (!this.initFlag) {
-            LOG.error("failed while init paramsMap, stop in send func, params = " + this.params);
-            return;
-        }
-        StringBuilder splunkMessage = new StringBuilder();
-//        String flowName = "";
-//        LinkedHashMap<String, String> map = new LinkedHashMap<String, String>();
-//        String[] paramList = this.params.split(",");
-//        for(String param : paramList) {
-//            String[] innerStr = param.split("=");
-//            map.put(innerStr[0].trim(), innerStr[1]);
-//            if (innerStr[0].equals("FlowName")) {
-//                flowName = innerStr[1];
-//            }
-//        }
-//
-//        if (flowName.equals("") || flowName.length() <= 0) {
-////            LOG.info("need flowName");
-//            return;
-//        }
-        LinkedHashMap<String, String> map = (LinkedHashMap<String, String>)this.paramsMap.clone();
-
-        // 给各字段赋值
-        Boolean sendFlag = false;
-        for(Map.Entry<String, Object> field : message.getFields().entrySet()) {
-//            LOG.info(" in message      key = " + field.getKey() + "  value = " + field.getValue());
-            if (field.getKey().equals("FlowName") && field.getValue().equals(map.get("FlowName"))) {
-                sendFlag = true;
-            }
-            if (!field.getKey().equals("FlowName") && map.containsKey(field.getKey())) {
-                map.put(field.getKey(), field.getValue().toString());
-//                LOG.info("put value key = " + field.getKey() + " value = " + field.getValue().toString());
-            }
-        }
-
-        if (!sendFlag) {
-//            LOG.info("flowName not match, flowName = " + flowName);
-            return;
-        }
-
-        for(Map.Entry<String, String> entry : map.entrySet()) {
-            if (splunkMessage.length() > 0) {
-                splunkMessage.append("|");
-            }
-            splunkMessage.append(entry.getValue());
-        }
-        splunkMessage.append("\r\n");
-
         try {
-            String resultStr = splunkMessage.toString();
+            if (null == xmlMap) {
+                LOG.error("failed while init xmlName, can not send message");
+                return;
+            }
+
+            Object obj = message.getField("FlowName");
+            if (null == obj) {
+                LOG.error("message without FlowName, message = " + message.toString());
+                return;
+            }
+            String msgFlowName = obj.toString();
+            if (!xmlMap.containsKey(msgFlowName)) {
+                LOG.error("FlowName not exist in paramsMap, FlowName = " + msgFlowName);
+                return;
+            }
+
+            LinkedHashMap<String, String> valueMap = (LinkedHashMap<String, String>) xmlMap.get(msgFlowName).clone();
+            // 给各字段赋值
+            for(Map.Entry<String, Object> field : message.getFields().entrySet()) {
+                if (valueMap.containsKey(field.getKey())) {
+                    valueMap.put(field.getKey(), field.getValue().toString());
+                }
+            }
+
+            StringBuilder tlogMessage = new StringBuilder();
+            for(Map.Entry<String, String> entry : valueMap.entrySet()) {
+                if (tlogMessage.length() > 0) {
+                    tlogMessage.append("|");
+                }
+                tlogMessage.append(entry.getValue());
+            }
+            tlogMessage.append("\r\n");
+
+            String resultStr = tlogMessage.toString();
             LOG.info("ready to make struct     " + resultStr);
             ByteBuf byteBuf = Unpooled.buffer(resultStr.getBytes().length);
             byteBuf.writeBytes(resultStr.getBytes());
             DatagramPacket resultData = new DatagramPacket(byteBuf, new InetSocketAddress(this.hostname, this.port));
             queue.put(resultData);
         }
-        catch (InterruptedException e) {
+        catch (Exception e) {
             e.printStackTrace();
         }
     }

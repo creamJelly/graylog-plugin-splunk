@@ -16,7 +16,6 @@
  */
 package com.graylog.splunk.output;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.inject.Inject;
 import com.google.inject.assistedinject.Assisted;
 import com.graylog.splunk.output.senders.Sender;
@@ -25,7 +24,6 @@ import org.graylog2.plugin.Message;
 import org.graylog2.plugin.configuration.Configuration;
 import org.graylog2.plugin.configuration.ConfigurationRequest;
 import org.graylog2.plugin.configuration.fields.ConfigurationField;
-import org.graylog2.plugin.configuration.fields.DropdownField;
 import org.graylog2.plugin.configuration.fields.NumberField;
 import org.graylog2.plugin.configuration.fields.TextField;
 import org.graylog2.plugin.inputs.annotations.ConfigClass;
@@ -37,16 +35,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
-import java.util.Map;
 
 public class SplunkOutput implements MessageOutput {
 
     private static final Logger LOG = LoggerFactory.getLogger(SplunkOutput.class);
 
-    private static final String CK_SPLUNK_HOST = "splunk_host";
-    private static final String CK_SPLUNK_PORT = "splunk_port";
-    private static final String CK_SPLUNK_PROTOCOL = "splunk_protocol";
-    private static final String CK_SPLUNK_PARAMS = "splunk_params";
+    private static final String CK_SPLUNK_HOST = "tlog_host";
+    private static final String CK_SPLUNK_PORT = "tlog_port";
 
     private boolean running = true;
 
@@ -67,17 +62,16 @@ public class SplunkOutput implements MessageOutput {
 //        sender = new UDPSender(
 //                configuration.getString(CK_SPLUNK_HOST),
 //                configuration.getInt(CK_SPLUNK_PORT),
-//                configuration.getString(CK_SPLUNK_PARAMS)
+//                configuration.getString(CK_SPLUNK_XML)
 //        );
 //        sender = new UDPSender_2(
 //                configuration.getString(CK_SPLUNK_HOST),
 //                configuration.getInt(CK_SPLUNK_PORT),
-//                configuration.getString(CK_SPLUNK_PARAMS)
+//                configuration.getString(CK_SPLUNK_XML)
 //        );
         sender = new UDPSender_3(
                 configuration.getString(CK_SPLUNK_HOST),
-                configuration.getInt(CK_SPLUNK_PORT),
-                configuration.getString(CK_SPLUNK_PARAMS)
+                configuration.getInt(CK_SPLUNK_PORT)
         );
         running = true;
     }
@@ -119,9 +113,7 @@ public class SplunkOutput implements MessageOutput {
 
     public boolean checkConfiguration(Configuration c) {
         return c.stringIsSet(CK_SPLUNK_HOST)
-                && c.intIsSet(CK_SPLUNK_PORT)
-                && c.stringIsSet(CK_SPLUNK_PROTOCOL)
-                && ("UDP".equals(c.getString(CK_SPLUNK_PROTOCOL)) || "TCP".equals(c.getString(CK_SPLUNK_PROTOCOL)));
+                && c.intIsSet(CK_SPLUNK_PORT);
     }
 
     @FactoryClass
@@ -143,37 +135,23 @@ public class SplunkOutput implements MessageOutput {
             final ConfigurationRequest configurationRequest = new ConfigurationRequest();
 
             configurationRequest.addField(new TextField(
-                            CK_SPLUNK_HOST, "Splunk Host", "",
+                            CK_SPLUNK_HOST, "Host", "",
                             "目标域名或IP",
                             ConfigurationField.Optional.NOT_OPTIONAL)
             );
 
             configurationRequest.addField(new NumberField(
-                            CK_SPLUNK_PORT, "Splunk Port", 12999,
+                            CK_SPLUNK_PORT, "Port", 12999,
                             "端口号",
                             ConfigurationField.Optional.OPTIONAL)
             );
-
-            final Map<String, String> protocols = ImmutableMap.of("UDP", "UDP");
-            configurationRequest.addField(new DropdownField(
-                            CK_SPLUNK_PROTOCOL, "Splunk Protocol", "UDP", protocols,
-                            "协议类型",
-                            ConfigurationField.Optional.OPTIONAL)
-            );
-
-            configurationRequest.addField(new TextField(
-                    CK_SPLUNK_PARAMS, "params", "",
-                    "参数列表",
-                    ConfigurationField.Optional.NOT_OPTIONAL)
-            );
-
             return configurationRequest;
         }
     }
 
     public static class Descriptor extends MessageOutput.Descriptor {
         public Descriptor() {
-            super("Splunk Output", false, "", "Writes messages to your Splunk installation via UDP or TCP.");
+            super("TLog Output", false, "", "Writes messages to TLog server with udp.");
         }
     }
 
