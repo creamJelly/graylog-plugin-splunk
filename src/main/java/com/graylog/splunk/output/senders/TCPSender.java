@@ -73,7 +73,7 @@ public class TCPSender implements Sender {
 
     protected void createBootstrap(final EventLoopGroup workerGroup) {
         final Bootstrap bootstrap = new Bootstrap();
-        final SplunkSenderThread senderThread = new SplunkSenderThread(queue);
+//        final SplunkSenderThread senderThread = new SplunkSenderThread(queue);
 
         bootstrap.group(workerGroup)
                 .channel(NioSocketChannel.class)
@@ -92,13 +92,13 @@ public class TCPSender implements Sender {
 
                             @Override
                             public void channelActive(ChannelHandlerContext ctx) throws Exception {
-                                senderThread.start(ctx.channel());
+//                                senderThread.start(ctx.channel());
                             }
 
                             @Override
                             public void channelInactive(ChannelHandlerContext ctx) throws Exception {
                                 LOG.info("Channel disconnected.");
-                                senderThread.stop();
+//                                senderThread.stop();
                                 scheduleReconnect(ctx.channel().eventLoop());
                             }
 
