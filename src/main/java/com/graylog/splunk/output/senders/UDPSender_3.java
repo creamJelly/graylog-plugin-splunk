@@ -60,12 +60,13 @@ public class UDPSender_3 implements Sender {
     int times = 0;
 
     private HashMap<String, LinkedHashMap<String, String>> xmlMap;
+    private HashMap<String, Map<String, Integer>> needCutMap;
 
     protected final BlockingQueue<DatagramPacket> queue;
 
     private final EventLoopGroup workerGroup = new NioEventLoopGroup();
 
-    public UDPSender_3(String hostname, int port) {
+    public UDPSender_3(String hostname, int port, String need_cut) {
         this.hostname = hostname;
         this.port = port;
 
@@ -127,6 +128,7 @@ public class UDPSender_3 implements Sender {
             valueMap.put(root.attributeValue("name"), value);
             xmlMap.put(structName, valueMap);
             LOG.info("structName = " + structName + " value = " + valueMap.toString());
+
         }
         // 获取他的子节点
         if (root.getName().equals("struct")) {
@@ -264,8 +266,8 @@ public class UDPSender_3 implements Sender {
 
             String resultStr = tlogMessage.toString();
             LOG.info("ready to make struct     " + resultStr);
-            ByteBuf byteBuf = Unpooled.buffer(resultStr.getBytes().length);
-            byteBuf.writeBytes(resultStr.getBytes());
+            ByteBuf byteBuf = Unpooled.buffer(resultStr.getBytes("UTF-8").length);
+            byteBuf.writeBytes(resultStr.getBytes("UTF-8"));
             DatagramPacket resultData = new DatagramPacket(byteBuf, new InetSocketAddress(this.hostname, this.port));
             queue.put(resultData);
         }
