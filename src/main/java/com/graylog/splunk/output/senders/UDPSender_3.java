@@ -60,13 +60,12 @@ public class UDPSender_3 implements Sender {
     int times = 0;
 
     private HashMap<String, LinkedHashMap<String, String>> xmlMap;
-    private HashMap<String, Map<String, Integer>> needCutMap;
 
     protected final BlockingQueue<DatagramPacket> queue;
 
     private final EventLoopGroup workerGroup = new NioEventLoopGroup();
 
-    public UDPSender_3(String hostname, int port, String need_cut) {
+    public UDPSender_3(String hostname, int port) {
         this.hostname = hostname;
         this.port = port;
 
@@ -121,11 +120,15 @@ public class UDPSender_3 implements Sender {
         if (!structName.equals("") && structName.length() > 0) {
             LinkedHashMap<String, String> valueMap = xmlMap.get(structName);
             String value = "NULL";
+            // 给版本号赋默认值
+            if (true == root.attributeValue("name").equals("Format")) {
+                value = "1.0.0";
+            }
             String valueType = root.attributeValue("type").trim();
             if (valueType.equals("int")) {
                 value = "0";
             }
-            valueMap.put(root.attributeValue("name"), value);
+            valueMap.put(root.attributeValue("name").toLowerCase(), value);
             xmlMap.put(structName, valueMap);
             LOG.info("structName = " + structName + " value = " + valueMap.toString());
 
@@ -250,8 +253,14 @@ public class UDPSender_3 implements Sender {
             LinkedHashMap<String, String> valueMap = (LinkedHashMap<String, String>) xmlMap.get(msgFlowName).clone();
             // 给各字段赋值
             for(Map.Entry<String, Object> field : message.getFields().entrySet()) {
-                if (valueMap.containsKey(field.getKey())) {
-                    valueMap.put(field.getKey(), field.getValue().toString());
+                // 所有tlog字段全都转成小写，然后进行匹配
+                String keyName = field.getKey().toLowerCase();
+                if (valueMap.containsKey(keyName)) {
+                    String str = field.getValue().toString();
+//                    LOG.info("put into : " + keyName + "    " + str);
+                    // 替换文本中的 "|"
+                    str = str.replaceAll("\\|", "_");
+                    valueMap.put(keyName, str);
                 }
             }
 

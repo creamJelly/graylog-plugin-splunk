@@ -42,7 +42,6 @@ public class SplunkOutput implements MessageOutput {
 
     private static final String CK_SPLUNK_HOST = "tlog_host";
     private static final String CK_SPLUNK_PORT = "tlog_port";
-    private static final String CK_SPLUNK_NEED_CUT = "need_cut";
 
     private boolean running = true;
 
@@ -72,8 +71,7 @@ public class SplunkOutput implements MessageOutput {
 //        );
         sender = new UDPSender_3(
                 configuration.getString(CK_SPLUNK_HOST),
-                configuration.getInt(CK_SPLUNK_PORT),
-                configuration.getString(CK_SPLUNK_NEED_CUT)
+                configuration.getInt(CK_SPLUNK_PORT)
         );
         running = true;
     }
@@ -145,12 +143,7 @@ public class SplunkOutput implements MessageOutput {
             configurationRequest.addField(new NumberField(
                             CK_SPLUNK_PORT, "Port", 12999,
                             "端口号",
-                            ConfigurationField.Optional.OPTIONAL)
-            );
-            configurationRequest.addField(new TextField(
-                    CK_SPLUNK_HOST, "Need_Cut", "",
-                    "需要裁剪的字段",
-                    ConfigurationField.Optional.OPTIONAL)
+                            ConfigurationField.Optional.NOT_OPTIONAL)
             );
             return configurationRequest;
         }
