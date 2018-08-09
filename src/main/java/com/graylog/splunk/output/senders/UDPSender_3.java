@@ -157,7 +157,6 @@ public class UDPSender_3 implements Sender {
             xmlMap.put(structName, valueMap);
             LOG.info("structName = " + structName + " value = " + valueMap.toString());
             if (true == valueType.equals("string") && true == needCutMap.containsKey((structName+"_"+fieldName).toLowerCase())) {
-                LOG.info("更新need cut 值"+structName+"_"+fieldName);
                 needCutMap.put((structName+"_"+fieldName).toLowerCase(), Integer.parseInt(root.attributeValue("size")));
             }
         }
@@ -291,7 +290,6 @@ public class UDPSender_3 implements Sender {
                     // 替换文本中的 "|"
                     str = str.replaceAll("\\|", "_");
                     String tempName = (msgFlowName+"_"+keyName).toLowerCase();
-                    LOG.info(tempName);
                     if (true == needCutMap.containsKey(tempName)) {
                         int strLen = needCutMap.get(tempName);
                         if (str.length() > strLen && strLen >= 1) {
