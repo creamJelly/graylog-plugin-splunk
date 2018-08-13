@@ -66,7 +66,7 @@ public class UDPSender_3 implements Sender {
 
     private final int cutType;
 
-    public UDPSender_3(String hostname, int port, String cutTypeStr) {
+    public UDPSender_3(String hostname, int port, String cutTypeStr, String filePath) {
         LOG.info("map value = "+cutTypeStr);
         this.hostname = hostname;
         this.port = port;
@@ -82,7 +82,7 @@ public class UDPSender_3 implements Sender {
         this.cutType = Integer.parseInt(cutTypeStr);
         this.needCutMap = new HashMap<>();
 //        initCut();
-        initParams();
+        initParams(filePath);
     }
 
 //    private void initCut() {
@@ -108,26 +108,27 @@ public class UDPSender_3 implements Sender {
     /**
      * 初始化参数
      */
-    private void initParams() {
+    private void initParams(String filePath) {
         try {
-            String path = File.separator + "home" + File.separator + "graylog_conf" + File.separator + "BI.xml";
-            File file = new File(path);
+//            String path = File.separator + "home" + File.separator + "graylog_conf" + File.separator + "BI.xml";
+            File file = new File(filePath);
 //            LOG.info("file path = " + path);
             if (!file.exists()) {
-                LOG.error("file not exist!  path = " + path);
+                LOG.error("file not exist!  path = " + filePath);
                 xmlMap = null;
                 return;
             }
 
             if (file.isDirectory()) {
-                LOG.error("need file, not dir , path = " + path);
+                LOG.error("need file, not dir , path = " + filePath);
                 xmlMap = null;
                 return;
             }
 
+            LOG.info("file path = " + file.getPath());
 
             xmlMap = new HashMap<String, LinkedHashMap<String, String>>();
-            InputStream in = new FileInputStream(path);
+            InputStream in = new FileInputStream(filePath);
             SAXReader reader = new SAXReader();
             Document doc = reader.read(in);
             Element root = doc.getRootElement();

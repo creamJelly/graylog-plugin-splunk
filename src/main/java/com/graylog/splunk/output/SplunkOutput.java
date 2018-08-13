@@ -46,6 +46,7 @@ public class SplunkOutput implements MessageOutput {
     private static final String CK_SPLUNK_HOST = "tlog_host";
     private static final String CK_SPLUNK_PORT = "tlog_port";
     private static final String CK_SPLUKN_CUT = "tlog_cut";
+    private static final String CK_SPLUNK_FILEPATH = "tlog_filePath";
 
     private boolean running = true;
 
@@ -76,7 +77,8 @@ public class SplunkOutput implements MessageOutput {
         sender = new UDPSender_3(
                 configuration.getString(CK_SPLUNK_HOST),
                 configuration.getInt(CK_SPLUNK_PORT),
-                configuration.getString(CK_SPLUKN_CUT)
+                configuration.getString(CK_SPLUKN_CUT),
+                configuration.getString(CK_SPLUNK_FILEPATH)
         );
         running = true;
     }
@@ -118,7 +120,9 @@ public class SplunkOutput implements MessageOutput {
 
     public boolean checkConfiguration(Configuration c) {
         return c.stringIsSet(CK_SPLUNK_HOST)
-                && c.intIsSet(CK_SPLUNK_PORT) && c.stringIsSet(CK_SPLUKN_CUT);
+                && c.intIsSet(CK_SPLUNK_PORT)
+                && c.stringIsSet(CK_SPLUKN_CUT)
+                && c.stringIsSet(CK_SPLUNK_FILEPATH);
     }
 
     @FactoryClass
@@ -158,6 +162,11 @@ public class SplunkOutput implements MessageOutput {
                             CK_SPLUKN_CUT, "裁剪方式", "0", value,
                             "当字符串超出限制长度时会被截断",
                             ConfigurationField.Optional.NOT_OPTIONAL)
+            );
+            configurationRequest.addField(new TextField(
+                    CK_SPLUNK_FILEPATH, "FilePath", "",
+                    "xml文件地址",
+                    ConfigurationField.Optional.NOT_OPTIONAL)
             );
             return configurationRequest;
         }
