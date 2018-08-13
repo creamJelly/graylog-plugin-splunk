@@ -24,6 +24,7 @@ import org.graylog2.plugin.Message;
 import org.graylog2.plugin.configuration.Configuration;
 import org.graylog2.plugin.configuration.ConfigurationRequest;
 import org.graylog2.plugin.configuration.fields.ConfigurationField;
+import org.graylog2.plugin.configuration.fields.DropdownField;
 import org.graylog2.plugin.configuration.fields.NumberField;
 import org.graylog2.plugin.configuration.fields.TextField;
 import org.graylog2.plugin.inputs.annotations.ConfigClass;
@@ -34,7 +35,9 @@ import org.graylog2.plugin.streams.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class SplunkOutput implements MessageOutput {
 
@@ -42,6 +45,7 @@ public class SplunkOutput implements MessageOutput {
 
     private static final String CK_SPLUNK_HOST = "tlog_host";
     private static final String CK_SPLUNK_PORT = "tlog_port";
+    private static final String CK_SPLUKN_CUT = "tlog_cut";
 
     private boolean running = true;
 
@@ -71,7 +75,8 @@ public class SplunkOutput implements MessageOutput {
 //        );
         sender = new UDPSender_3(
                 configuration.getString(CK_SPLUNK_HOST),
-                configuration.getInt(CK_SPLUNK_PORT)
+                configuration.getInt(CK_SPLUNK_PORT),
+                configuration.getString(CK_SPLUKN_CUT)
         );
         running = true;
     }
@@ -113,7 +118,7 @@ public class SplunkOutput implements MessageOutput {
 
     public boolean checkConfiguration(Configuration c) {
         return c.stringIsSet(CK_SPLUNK_HOST)
-                && c.intIsSet(CK_SPLUNK_PORT);
+                && c.intIsSet(CK_SPLUNK_PORT) && c.stringIsSet(CK_SPLUKN_CUT);
     }
 
     @FactoryClass
@@ -143,6 +148,15 @@ public class SplunkOutput implements MessageOutput {
             configurationRequest.addField(new NumberField(
                             CK_SPLUNK_PORT, "Port", 12999,
                             "端口号",
+                            ConfigurationField.Optional.NOT_OPTIONAL)
+            );
+            HashMap<String, String> value = new HashMap<>();
+            value.put("0", "保留左侧");
+            value.put("1", "保留两端");
+            value.put("2", "保留右侧");
+            configurationRequest.addField(new DropdownField(
+                            CK_SPLUKN_CUT, "裁剪方式", "0", value,
+                            "当字符串超出限制长度时会被截断",
                             ConfigurationField.Optional.NOT_OPTIONAL)
             );
             return configurationRequest;

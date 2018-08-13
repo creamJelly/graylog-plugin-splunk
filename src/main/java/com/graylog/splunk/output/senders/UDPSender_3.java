@@ -17,6 +17,7 @@
 package com.graylog.splunk.output.senders;
 
 import com.graylog.splunk.output.SplunkSenderThread;
+import com.sun.jna.IntegerType;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -36,10 +37,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -60,12 +58,16 @@ public class UDPSender_3 implements Sender {
     int times = 0;
 
     private HashMap<String, LinkedHashMap<String, String>> xmlMap;
+    private HashMap<String,  Integer> needCutMap;
 
     protected final BlockingQueue<DatagramPacket> queue;
 
     private final EventLoopGroup workerGroup = new NioEventLoopGroup();
 
-    public UDPSender_3(String hostname, int port) {
+    private final int cutType;
+
+    public UDPSender_3(String hostname, int port, String cutTypeStr) {
+        LOG.info("map value = "+cutTypeStr);
         this.hostname = hostname;
         this.port = port;
 
@@ -77,8 +79,31 @@ public class UDPSender_3 implements Sender {
           * TODO: Make configurable.
           */
         this.queue = new LinkedBlockingQueue<>(512);
+        this.cutType = Integer.parseInt(cutTypeStr);
+        this.needCutMap = new HashMap<>();
+//        initCut();
         initParams();
     }
+
+//    private void initCut() {
+//        if (null == needCutMap) {
+//            needCutMap = new HashMap<>();
+//        }
+//
+//        String[] cutList = needCut.split(",");
+//
+//        for(String temp : cutList) {
+//            String[] tempList = temp.split("_");
+//            if (2 != tempList.length) {
+//                continue;
+//            }
+//            String tbName = tempList[0];
+//            String fieldName = tempList[1];
+//
+//            needCutMap.put((tbName+"_"+fieldName).toLowerCase(), 0);
+//        }
+//        LOG.info("need cut map = " + needCutMap.toString());
+//    }
 
     /**
      * 初始化参数
@@ -116,6 +141,8 @@ public class UDPSender_3 implements Sender {
 
     private void readNode(Element root, String structName) {
         if (root == null) return;
+
+//        LOG.info(root.attributeValue("name") + "_____" + structName);
         // 获取属性
         if (!structName.equals("") && structName.length() > 0) {
             LinkedHashMap<String, String> valueMap = xmlMap.get(structName);
@@ -128,10 +155,18 @@ public class UDPSender_3 implements Sender {
             if (valueType.equals("int")) {
                 value = "0";
             }
-            valueMap.put(root.attributeValue("name").toLowerCase(), value);
+            String fieldName = root.attributeValue("name").toLowerCase();
+            valueMap.put(fieldName, value);
             xmlMap.put(structName, valueMap);
-            LOG.info("structName = " + structName + " value = " + valueMap.toString());
-
+//            LOG.info("structName = " + structName + " value = " + valueMap.toString());
+            if (true == valueType.equals("string")) {
+                // 所有的字符串，都可以截取
+                String tempName = (structName+"_"+fieldName).toLowerCase();
+                needCutMap.put(tempName, Integer.parseInt(root.attributeValue("size")));
+            }
+//            if (true == valueType.equals("string") && true == needCutMap.containsKey((structName+"_"+fieldName).toLowerCase())) {
+//                needCutMap.put((structName+"_"+fieldName).toLowerCase(), Integer.parseInt(root.attributeValue("size")));
+//            }
         }
         // 获取他的子节点
         if (root.getName().equals("struct")) {
@@ -140,6 +175,8 @@ public class UDPSender_3 implements Sender {
             valueMap.put("FlowName", root.attributeValue("name"));
             xmlMap.put(root.attributeValue("name"), valueMap);
         }
+
+        // 遍历子节点
         List<Element> childNodes = root.elements();
         for (Element e : childNodes) {
             if (root.getName().equals("struct")) {
@@ -149,6 +186,7 @@ public class UDPSender_3 implements Sender {
                 readNode(e, "");
             }
         }
+//        LOG.info(needCutMap.toString());
     }
 
     protected void createBootstrap(final EventLoopGroup workerGroup) {
@@ -257,9 +295,36 @@ public class UDPSender_3 implements Sender {
                 String keyName = field.getKey().toLowerCase();
                 if (valueMap.containsKey(keyName)) {
                     String str = field.getValue().toString();
-//                    LOG.info("put into : " + keyName + "    " + str);
                     // 替换文本中的 "|"
                     str = str.replaceAll("\\|", "_");
+                    String tempName = (msgFlowName+"_"+keyName).toLowerCase();
+                    if (true == needCutMap.containsKey(tempName)) {
+                        int strLen = needCutMap.get(tempName);
+                        int len = str.length();
+                        if (len > strLen && strLen >= 1) {
+//                            str = str.substring(0, strLen);
+                            switch (this.cutType) {
+                                case 0 : {
+                                    // 截取左边
+                                    str = str.substring(0, strLen - 1);
+                                    break;
+                                }
+                                case 1 : {
+                                    // 截取中间
+                                    int left = (len - strLen) / 2;
+                                    int right = (len - strLen) / 2 + strLen - 1  ;
+                                    str = str.substring(left, right);
+                                    break;
+                                }
+                                case 2 : {
+                                    // 截取右边
+                                    str = str.substring(len - strLen + 1, len);
+                                    break;
+                                }
+                                default: LOG.error("not exist cutType!");
+                            }
+                        }
+                    }
                     valueMap.put(keyName, str);
                 }
             }
