@@ -290,6 +290,7 @@ public class UDPSender_3 implements Sender {
             }
 
             LinkedHashMap<String, String> valueMap = (LinkedHashMap<String, String>) xmlMap.get(msgFlowName).clone();
+            LOG.info("after clone : " + valueMap.toString());
             // 给各字段赋值
             for(Map.Entry<String, Object> field : message.getFields().entrySet()) {
                 // 所有tlog字段全都转成小写，然后进行匹配
@@ -298,6 +299,12 @@ public class UDPSender_3 implements Sender {
                     String str = field.getValue().toString();
                     // 替换文本中的 "|"
                     str = str.replaceAll("\\|", "_");
+                    str = str.replaceAll("\r\n", "_");
+                    str = str.replaceAll("\n", "_");
+                    str = str.replaceAll(System.getProperty("line.separator"), "_");
+//                    str = str.replaceAll("\r\n", "!!!!!");
+//                    str = str.replaceAll("\n", "~~~~~");
+//                    str = str.replaceAll(System.getProperty("line.separator"), "!~!~");
                     String tempName = (msgFlowName+"_"+keyName).toLowerCase();
                     if (true == needCutMap.containsKey(tempName)) {
                         int strLen = needCutMap.get(tempName);
@@ -337,7 +344,8 @@ public class UDPSender_3 implements Sender {
                 }
                 tlogMessage.append(entry.getValue());
             }
-            tlogMessage.append("\r\n");
+            tlogMessage.append(System.getProperty("line.separator"));
+//            tlogMessage.append("\r\n");
 
             String resultStr = tlogMessage.toString();
             LOG.info("ready to make struct     " + resultStr);
