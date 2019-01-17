@@ -1,16 +1,16 @@
 /**
  * This file is part of Graylog.
- *
+ * <p>
  * Graylog is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
+ * <p>
  * Graylog is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
+ * <p>
  * You should have received a copy of the GNU General Public License
  * along with Graylog.  If not, see <http://www.gnu.org/licenses/>.
  */
@@ -58,7 +58,7 @@ public class UDPSender_3 implements Sender {
     int times = 0;
 
     private HashMap<String, LinkedHashMap<String, String>> xmlMap;
-    private HashMap<String,  Integer> needCutMap;
+    private HashMap<String, Integer> needCutMap;
 
     protected final BlockingQueue<DatagramPacket> queue;
 
@@ -67,17 +67,17 @@ public class UDPSender_3 implements Sender {
     private final int cutType;
 
     public UDPSender_3(String hostname, int port, String cutTypeStr, String filePath) {
-        LOG.info("map value = "+cutTypeStr);
+        LOG.info("map value = " + cutTypeStr);
         this.hostname = hostname;
         this.port = port;
 
         /*
-          * This internal queue shields us from causing OutputBufferProcessor
-          * timeouts for a short time without risking memory overload or
-          * loosing messages in case of temporary connection problems.
-          *
-          * TODO: Make configurable.
-          */
+         * This internal queue shields us from causing OutputBufferProcessor
+         * timeouts for a short time without risking memory overload or
+         * loosing messages in case of temporary connection problems.
+         *
+         * TODO: Make configurable.
+         */
         this.queue = new LinkedBlockingQueue<>(512);
         this.cutType = Integer.parseInt(cutTypeStr);
         this.needCutMap = new HashMap<>();
@@ -133,8 +133,7 @@ public class UDPSender_3 implements Sender {
             Document doc = reader.read(in);
             Element root = doc.getRootElement();
             readNode(root, "");
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
             xmlMap = null;
         }
@@ -147,22 +146,37 @@ public class UDPSender_3 implements Sender {
         // 获取属性
         if (!structName.equals("") && structName.length() > 0) {
             LinkedHashMap<String, String> valueMap = xmlMap.get(structName);
-            String value = "NULL";
+            String value = "";
             // 给版本号赋默认值
             if (true == root.attributeValue("name").equals("Format")) {
                 value = "1.0.0";
             }
             String valueType = root.attributeValue("type").trim();
-            if (valueType.equals("int")) {
-                value = "0";
+            switch (valueType) {
+                case "int": {
+                    value = "0"; break;
+                }
+                case "string": {
+                    value = "NULL"; break;
+                }
+                case "float": {
+                    value = "0.00"; break;
+                }
+                default: {
+                    LOG.error("type not match, type = " + valueType);
+                    value = "";
+                }
             }
+//            if (valueType.equals("int")) {
+//                value = "0";
+//            }
             String fieldName = root.attributeValue("name").toLowerCase();
             valueMap.put(fieldName, value);
             xmlMap.put(structName, valueMap);
 //            LOG.info("structName = " + structName + " value = " + valueMap.toString());
             if (true == valueType.equals("string")) {
                 // 所有的字符串，都可以截取
-                String tempName = (structName+"_"+fieldName).toLowerCase();
+                String tempName = (structName + "_" + fieldName).toLowerCase();
                 needCutMap.put(tempName, Integer.parseInt(root.attributeValue("size")));
             }
 //            if (true == valueType.equals("string") && true == needCutMap.containsKey((structName+"_"+fieldName).toLowerCase())) {
@@ -182,8 +196,7 @@ public class UDPSender_3 implements Sender {
         for (Element e : childNodes) {
             if (root.getName().equals("struct")) {
                 readNode(e, root.attributeValue("name"));
-            }
-            else {
+            } else {
                 readNode(e, "");
             }
         }
@@ -206,7 +219,7 @@ public class UDPSender_3 implements Sender {
                         ch.pipeline().addLast(new SimpleChannelInboundHandler<NioDatagramChannel>() {
                             @Override
                             protected void channelRead0(ChannelHandlerContext ctx, NioDatagramChannel msg) throws Exception {
-                              // we only send data, never read on the socket
+                                // we only send data, never read on the socket
                             }
 
                             @Override
@@ -250,8 +263,7 @@ public class UDPSender_3 implements Sender {
                 if (times <= 5) {
                     LOG.info("Starting reconnect!");
                     createBootstrap(workerGroup);
-                }
-                else {
+                } else {
                     LOG.info("reconnect over 5 times, stop!");
                 }
             }
@@ -292,11 +304,12 @@ public class UDPSender_3 implements Sender {
             LinkedHashMap<String, String> valueMap = (LinkedHashMap<String, String>) xmlMap.get(msgFlowName).clone();
             LOG.info("after clone : " + valueMap.toString());
             // 给各字段赋值
-            for(Map.Entry<String, Object> field : message.getFields().entrySet()) {
+            for (Map.Entry<String, Object> field : message.getFields().entrySet()) {
                 // 所有tlog字段全都转成小写，然后进行匹配
                 String keyName = field.getKey().toLowerCase();
                 if (valueMap.containsKey(keyName)) {
                     String str = field.getValue().toString();
+
                     // 替换文本中的 "|"
                     str = str.replaceAll("\\|", "_");
                     str = str.replaceAll("\r\n", "_");
@@ -305,31 +318,32 @@ public class UDPSender_3 implements Sender {
 //                    str = str.replaceAll("\r\n", "!!!!!");
 //                    str = str.replaceAll("\n", "~~~~~");
 //                    str = str.replaceAll(System.getProperty("line.separator"), "!~!~");
-                    String tempName = (msgFlowName+"_"+keyName).toLowerCase();
+                    String tempName = (msgFlowName + "_" + keyName).toLowerCase();
                     if (true == needCutMap.containsKey(tempName)) {
                         int strLen = needCutMap.get(tempName);
                         int len = str.length();
                         if (len > strLen && strLen >= 1) {
 //                            str = str.substring(0, strLen);
                             switch (this.cutType) {
-                                case 0 : {
+                                case 0: {
                                     // 截取左边
                                     str = str.substring(0, strLen - 1);
                                     break;
                                 }
-                                case 1 : {
+                                case 1: {
                                     // 截取中间
                                     int left = (len - strLen) / 2;
-                                    int right = (len - strLen) / 2 + strLen - 1  ;
+                                    int right = (len - strLen) / 2 + strLen - 1;
                                     str = str.substring(left, right);
                                     break;
                                 }
-                                case 2 : {
+                                case 2: {
                                     // 截取右边
                                     str = str.substring(len - strLen + 1, len);
                                     break;
                                 }
-                                default: LOG.error("not exist cutType!");
+                                default:
+                                    LOG.error("not exist cutType!");
                             }
                         }
                     }
@@ -338,7 +352,7 @@ public class UDPSender_3 implements Sender {
             }
 
             StringBuilder tlogMessage = new StringBuilder();
-            for(Map.Entry<String, String> entry : valueMap.entrySet()) {
+            for (Map.Entry<String, String> entry : valueMap.entrySet()) {
                 if (tlogMessage.length() > 0) {
                     tlogMessage.append("|");
                 }
@@ -353,8 +367,7 @@ public class UDPSender_3 implements Sender {
             byteBuf.writeBytes(resultStr.getBytes("UTF-8"));
             DatagramPacket resultData = new DatagramPacket(byteBuf, new InetSocketAddress(this.hostname, this.port));
             queue.put(resultData);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
